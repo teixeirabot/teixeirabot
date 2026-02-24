@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seagull Wi-Fi Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --accent: #38bdf8;
+      --muted: #94a3b8;
+      --border: rgba(148,163,184,.2);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #020617, #0f172a 50%, #0b1120 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 32px clamp(16px, 5vw, 72px);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 2.5vw, 2.8rem);
+      letter-spacing: 0.05em;
+    }
+    header span {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    main {
+      flex: 1;
+      padding: clamp(16px, 4vw, 64px);
+      display: grid;
+      gap: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+    .card {
+      background: rgba(15,23,42,.8);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(2,6,23,.6);
+      backdrop-filter: blur(10px);
+    }
+    .card h2 {
+      margin: 0 0 16px;
+      font-size: 1.2rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    select, input, textarea {
+      width: 100%;
+      background: rgba(15,23,42,.6);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      color: inherit;
+      font: inherit;
+      margin-bottom: 14px;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .inline-fields {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .inline-fields > div { flex: 1 1 140px; }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 16px;
+      padding: 14px;
+      font: inherit;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+    .primary {
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 600;
+      box-shadow: 0 15px 40px rgba(56,189,248,.4);
+    }
+    .ghost {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid rgba(56,189,248,.3);
+    }
+    button:hover { transform: translateY(-2px); }
+    .logs {
+      background: #020617;
+      border-radius: 16px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      color: #cbd5f5;
+      min-height: 180px;
+      border: 1px solid var(--border);
+    }
+    footer {
+      padding: 24px clamp(16px, 4vw, 64px);
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Seagull Wi-Fi Lab</h1>
+      <span>Painel de cenários e APIs (mock)</span>
+    </div>
+    <button class="ghost" style="width:auto; padding-inline:24px;">Login / Access PS</button>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Cenário / Template</h2>
+      <label for="scenario">Selecione um cenário</label>
+      <select id="scenario">
+        <option value="">Escolher...</option>
+        <option>Portal Cativo - CaptiveFlow01</option>
+        <option>Autenticação RADIUS (Diameter)</option>
+        <option>Provisionamento PS - REST</option>
+      </select>
+
+      <div class="inline-fields">
+        <div>
+          <label for="ssid">SSID</label>
+          <input id="ssid" placeholder="ex.: wifi-lab" />
+        </div>
+        <div>
+          <label for="sessions">Sessões</label>
+          <input id="sessions" type="number" min="1" value="10" />
+        </div>
+      </div>
+
+      <label for="payload">Parâmetros / Payload</label>
+      <textarea id="payload" placeholder="Ex.: JSON para API interna, credenciais, tokens..."></textarea>
+
+      <button class="primary">Pré-visualizar Execução</button>
+    </section>
+
+    <section class="card">
+      <h2>APIs &amp; Integrações</h2>
+      <label for="internal-api">Endpoint Interno</label>
+      <input id="internal-api" placeholder="https://intra.local/api/v1/provision" />
+
+      <label for="external-api">Endpoint Externo</label>
+      <input id="external-api" placeholder="https://partner.example.com/hooks" />
+
+      <label for="tokens">Credenciais / Headers</label>
+      <textarea id="tokens" placeholder="Authorization: Bearer ..."></textarea>
+
+      <button class="ghost">Guardar Configuração</button>
+    </section>
+
+    <section class="card" style="grid-column: 1 / -1;">
+      <h2>Estado &amp; Logs (mock)</h2>
+      <div class="logs">
+        <div>[00:00] Ready — selecione um cenário e parâmetros.</div>
+        <div>[00:05] REST ➜ GET /status/seagull → 200 OK</div>
+        <div>[00:08] Diameter session template carregado.</div>
+        <div>[00:12] Aguardando trigger...</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Interface mock — funcionalidades ainda não ligadas ao Seagull</footer>
+</body>
+</html>
