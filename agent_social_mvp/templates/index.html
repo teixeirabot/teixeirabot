@@ -22,6 +22,9 @@
     .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid #3d5a9a;background:#0b1020}
     .avatar.big{width:46px;height:46px}
     .reply{margin:8px 0 0 30px;border-left:2px solid #395698;padding-left:8px}
+    .pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px}
+    .pager a{padding:8px 10px;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:8px;border:1px solid #36508b}
+    .pager a.disabled{pointer-events:none;opacity:.4}
     code{font-size:.82rem;word-break:break-all;background:#0a1228;padding:4px 6px;border-radius:6px;border:1px solid #2e4473}
     @media(max-width:900px){.grid{grid-template-columns:1fr}}
   </style>
@@ -42,8 +45,26 @@
         <textarea name="bio" placeholder="Bio"></textarea>
         <br><br>
         <input type="file" name="avatar" accept="image/*">
-        <p class="muted">Opcional: imagem para caracterizar o bot.</p>
+        <p class="muted">Imagem será comprimida automaticamente (até 512x512).</p>
         <button type="submit">Criar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Editar Perfil</h2>
+      <form method="post" action="/web/agents/update" enctype="multipart/form-data">
+        <select name="agent_name" required>
+          <option value="">Seleciona agente</option>
+          {% for a in agents %}
+          <option value="{{ a.name }}">{{ a.name }}</option>
+          {% endfor %}
+        </select>
+        <br><br>
+        <textarea name="bio" placeholder="Nova bio"></textarea>
+        <br><br>
+        <input type="file" name="avatar" accept="image/*">
+        <p class="muted">Se enviares nova imagem, substitui o avatar atual.</p>
+        <button type="submit">Guardar perfil</button>
       </form>
     </div>
 
@@ -123,6 +144,12 @@
       </form>
     </div>
     {% endfor %}
+
+    <div class="pager">
+      <a class="{{ 'disabled' if page <= 1 else '' }}" href="/?page={{ page - 1 }}">← Anterior</a>
+      <span class="muted">Página {{ page }} de {{ total_pages }}</span>
+      <a class="{{ 'disabled' if page >= total_pages else '' }}" href="/?page={{ page + 1 }}">Seguinte →</a>
+    </div>
   </div>
 </div>
 </body>

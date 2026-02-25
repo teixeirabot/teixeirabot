@@ -1,11 +1,13 @@
 from pathlib import Path
+import io
 import uuid
 from fastapi import FastAPI, Depends, HTTPException, Request, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import select, text
+from sqlalchemy import select, text, func
+from PIL import Image
 
 from .db import Base, engine, get_db
 from .models import Agent, Post, Reply
@@ -46,11 +48,42 @@ def _get_agent_by_key(db: Session, api_key: str) -> Agent | None:
     return db.scalar(select(Agent).where(Agent.api_key == api_key))
 
 
+def _save_avatar_image(avatar: UploadFile | None) -> str:
+    if not avatar or not avatar.filename:
+        return ""
+
+    raw = avatar.file.read()
+    if len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Avatar demasiado grande (max 8MB)")
+
+    try:
+        img = Image.open(io.BytesIO(raw))
+    except Exception:
+        raise HTTPException(400, "Imagem inválida")
+
+    img = img.convert("RGB")
+    img.thumbnail((512, 512))
+
+    filename = f"{uuid.uuid4().hex}.jpg"
+    out_path = UPLOADS_DIR / filename
+    img.save(out_path, format="JPEG", quality=82, optimize=True)
+    return f"/static/uploads/{filename}"
+
+
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, db: Session = Depends(get_db)):
-    posts = db.scalars(select(Post).order_by(Post.created_at.desc()).limit(50)).all()
+def home(request: Request, page: int = 1, db: Session = Depends(get_db)):
+    per_page = 10
+    page = max(1, page)
+    total_posts = db.scalar(select(func.count()).select_from(Post)) or 0
+    total_pages = max(1, (total_posts + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    offset = (page - 1) * per_page
+
+    posts = db.scalars(select(Post).order_by(Post.created_at.desc()).offset(offset).limit(per_page)).all()
     agents = db.scalars(select(Agent).order_by(Agent.name.asc())).all()
-    replies = db.scalars(select(Reply).order_by(Reply.created_at.asc())).all()
+
+    post_ids = [p.id for p in posts]
+    replies = db.scalars(select(Reply).where(Reply.post_id.in_(post_ids)).order_by(Reply.created_at.asc())).all() if post_ids else []
 
     replies_by_post = {}
     for r in replies:
@@ -63,6 +96,8 @@ def home(request: Request, db: Session = Depends(get_db)):
             "posts": posts,
             "agents": agents,
             "replies_by_post": replies_by_post,
+            "page": page,
+            "total_pages": total_pages,
         },
     )
 
@@ -77,18 +112,28 @@ async def web_create_agent(
     if _get_agent_by_name(db, name):
         return RedirectResponse(url="/", status_code=303)
 
-    avatar_url = ""
-    if avatar and avatar.filename:
-        suffix = Path(avatar.filename).suffix.lower()
-        if suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
-            filename = f"{uuid.uuid4().hex}{suffix}"
-            out_path = UPLOADS_DIR / filename
-            data = await avatar.read()
-            out_path.write_bytes(data)
-            avatar_url = f"/static/uploads/{filename}"
+    avatar_url = _save_avatar_image(avatar)
 
     agent = Agent(name=name, bio=bio, avatar_url=avatar_url, api_key=issue_api_key())
     db.add(agent)
+    db.commit()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/web/agents/update")
+async def web_update_agent(
+    agent_name: str = Form(...),
+    bio: str = Form(""),
+    avatar: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+):
+    agent = _get_agent_by_name(db, agent_name)
+    if not agent:
+        return RedirectResponse(url="/", status_code=303)
+
+    agent.bio = bio
+    if avatar and avatar.filename:
+        agent.avatar_url = _save_avatar_image(avatar)
     db.commit()
     return RedirectResponse(url="/", status_code=303)
 
@@ -167,8 +212,11 @@ def create_reply(
 
 
 @app.get("/api/feed")
-def get_feed(db: Session = Depends(get_db)):
-    posts = db.scalars(select(Post).order_by(Post.created_at.desc()).limit(100)).all()
+def get_feed(page: int = 1, per_page: int = 20, db: Session = Depends(get_db)):
+    page = max(1, page)
+    per_page = min(100, max(1, per_page))
+    offset = (page - 1) * per_page
+    posts = db.scalars(select(Post).order_by(Post.created_at.desc()).offset(offset).limit(per_page)).all()
     output = []
     for p in posts:
         author = db.get(Agent, p.agent_id)
