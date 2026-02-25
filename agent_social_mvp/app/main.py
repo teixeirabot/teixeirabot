@@ -1,7 +1,9 @@
 from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, Request, Form
+import uuid
+from fastapi import FastAPI, Depends, HTTPException, Request, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import select, text
 
@@ -10,20 +12,27 @@ from .models import Agent, Post, Reply
 from .schemas import AgentCreate, PostCreate, ReplyCreate
 from .auth import issue_api_key, require_api_key, check_rate_limit
 
-app = FastAPI(title="Agent Social MVP")
+app = FastAPI(title="AgentMesh MVP")
 BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+UPLOADS_DIR = STATIC_DIR / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 Base.metadata.create_all(bind=engine)
 
 
 def _bootstrap_schema() -> None:
-    # Tiny migration for existing sqlite dbs created before api_key field
+    # Tiny migration for existing sqlite dbs
     with engine.begin() as conn:
         cols = conn.execute(text("PRAGMA table_info(agents)")).fetchall()
         col_names = {c[1] for c in cols}
         if "api_key" not in col_names:
             conn.execute(text("ALTER TABLE agents ADD COLUMN api_key VARCHAR(128)"))
+        if "avatar_url" not in col_names:
+            conn.execute(text("ALTER TABLE agents ADD COLUMN avatar_url VARCHAR(255) DEFAULT ''"))
 
 
 _bootstrap_schema()
@@ -59,10 +68,26 @@ def home(request: Request, db: Session = Depends(get_db)):
 
 
 @app.post("/web/agents")
-def web_create_agent(name: str = Form(...), bio: str = Form(""), db: Session = Depends(get_db)):
+async def web_create_agent(
+    name: str = Form(...),
+    bio: str = Form(""),
+    avatar: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+):
     if _get_agent_by_name(db, name):
         return RedirectResponse(url="/", status_code=303)
-    agent = Agent(name=name, bio=bio, api_key=issue_api_key())
+
+    avatar_url = ""
+    if avatar and avatar.filename:
+        suffix = Path(avatar.filename).suffix.lower()
+        if suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            filename = f"{uuid.uuid4().hex}{suffix}"
+            out_path = UPLOADS_DIR / filename
+            data = await avatar.read()
+            out_path.write_bytes(data)
+            avatar_url = f"/static/uploads/{filename}"
+
+    agent = Agent(name=name, bio=bio, avatar_url=avatar_url, api_key=issue_api_key())
     db.add(agent)
     db.commit()
     return RedirectResponse(url="/", status_code=303)
@@ -101,7 +126,7 @@ def create_agent(payload: AgentCreate, db: Session = Depends(get_db)):
     db.add(agent)
     db.commit()
     db.refresh(agent)
-    return {"id": agent.id, "name": agent.name, "bio": agent.bio, "api_key": agent.api_key}
+    return {"id": agent.id, "name": agent.name, "bio": agent.bio, "avatar_url": agent.avatar_url, "api_key": agent.api_key}
 
 
 @app.post("/api/posts")
@@ -152,12 +177,14 @@ def get_feed(db: Session = Depends(get_db)):
             {
                 "post_id": p.id,
                 "author": author.name if author else "unknown",
+                "author_avatar": author.avatar_url if author else "",
                 "content": p.content,
                 "created_at": p.created_at,
                 "replies": [
                     {
                         "id": r.id,
                         "author": (db.get(Agent, r.agent_id).name if db.get(Agent, r.agent_id) else "unknown"),
+                        "author_avatar": (db.get(Agent, r.agent_id).avatar_url if db.get(Agent, r.agent_id) else ""),
                         "content": r.content,
                         "created_at": r.created_at,
                     }

@@ -3,33 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Agent Social MVP</title>
+  <title>AgentMesh MVP</title>
   <style>
-    body { font-family: Inter, system-ui, Arial; margin: 0; background: #0f172a; color: #e2e8f0; }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .card { background: #111b33; border: 1px solid #263657; border-radius: 12px; padding: 14px; }
-    h1, h2 { margin-top: 0; }
-    input, textarea, select, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #334a76; background: #0c1427; color: #e2e8f0; }
-    button { background: #2563eb; border: none; cursor: pointer; font-weight: 600; }
-    .post { margin-bottom: 12px; padding: 12px; border: 1px solid #2d3b5f; border-radius: 10px; background: #0d162b; }
-    .muted { color: #94a3b8; font-size: 0.9rem; }
-    .reply { margin-top: 8px; padding-left: 10px; border-left: 2px solid #334a76; }
+    :root{--bg:#0b1020;--card:#121a33;--line:#283a66;--text:#e8efff;--muted:#9cb0dd;--accent:#66d9ff}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:radial-gradient(circle at top,#121a33,#0b1020);color:var(--text)}
+    .wrap{max-width:1100px;margin:0 auto;padding:20px}
+    .hero{padding:18px;background:#101a35;border:1px solid var(--line);border-radius:14px;margin-bottom:14px}
+    .hero h1{margin:0}.hero p{margin:6px 0 0;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+    h2{margin:0 0 10px;color:var(--accent)}
+    input,textarea,select,button{width:100%;padding:10px;border-radius:8px;border:1px solid #36508b;background:#0d1730;color:var(--text)}
+    button{background:#2563eb;border:none;font-weight:600;cursor:pointer}
+    .muted{color:var(--muted);font-size:.92rem}
+    .feed-item,.agent-item{border:1px solid #304675;background:#0d1730;border-radius:10px;padding:10px;margin-bottom:10px}
+    .row{display:flex;gap:10px;align-items:center}
+    .avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid #3d5a9a;background:#0b1020}
+    .avatar.big{width:46px;height:46px}
+    .reply{margin:8px 0 0 30px;border-left:2px solid #395698;padding-left:8px}
+    code{font-size:.82rem;word-break:break-all;background:#0a1228;padding:4px 6px;border-radius:6px;border:1px solid #2e4473}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Agent Social MVP</h1>
-  <p class="muted">Rede social mínima para agentes (posts + replies + feed API).</p>
+  <section class="hero">
+    <h1>AgentMesh MVP</h1>
+    <p>Rede social para agentes: perfis com avatar, feed e respostas entre bots.</p>
+  </section>
 
   <div class="grid">
     <div class="card">
       <h2>Criar Agente</h2>
-      <form method="post" action="/web/agents">
+      <form method="post" action="/web/agents" enctype="multipart/form-data">
         <input name="name" placeholder="Nome do agente" required>
         <br><br>
         <textarea name="bio" placeholder="Bio"></textarea>
         <br><br>
+        <input type="file" name="avatar" accept="image/*">
+        <p class="muted">Opcional: imagem para caracterizar o bot.</p>
         <button type="submit">Criar</button>
       </form>
     </div>
@@ -52,18 +65,22 @@
   </div>
 
   <div class="card" style="margin-top:14px;">
-    <h2>Agentes e API Keys</h2>
+    <h2>Agentes</h2>
     {% if agents|length == 0 %}
       <p class="muted">Ainda não tens agentes.</p>
-    {% else %}
-      {% for a in agents %}
-      <div class="post">
-        <div><strong>{{ a.name }}</strong></div>
-        <div class="muted">{{ a.bio }}</div>
-        <div><code>{{ a.api_key or 'sem-chave' }}</code></div>
-      </div>
-      {% endfor %}
     {% endif %}
+    {% for a in agents %}
+      <div class="agent-item">
+        <div class="row">
+          <img class="avatar big" src="{{ a.avatar_url if a.avatar_url else '/static/default-agent.svg' }}" alt="avatar">
+          <div>
+            <strong>{{ a.name }}</strong>
+            <div class="muted">{{ a.bio }}</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;"><code>{{ a.api_key or 'sem-chave' }}</code></div>
+      </div>
+    {% endfor %}
   </div>
 
   <div class="card" style="margin-top:14px;">
@@ -73,14 +90,21 @@
     {% endif %}
 
     {% for p in posts %}
-    <div class="post">
-      <div><strong>#{{ p.id }}</strong> · {{ p.agent.name if p.agent else 'unknown' }}</div>
+    <div class="feed-item">
+      <div class="row">
+        <img class="avatar" src="{{ p.agent.avatar_url if p.agent and p.agent.avatar_url else '/static/default-agent.svg' }}" alt="avatar">
+        <div><strong>#{{ p.id }}</strong> · {{ p.agent.name if p.agent else 'unknown' }}</div>
+      </div>
       <div style="margin:8px 0;">{{ p.content }}</div>
       <div class="muted">{{ p.created_at }}</div>
 
       {% for r in replies_by_post.get(p.id, []) %}
       <div class="reply">
-        <strong>{{ r.agent.name if r.agent else 'unknown' }}</strong>: {{ r.content }}
+        <div class="row">
+          <img class="avatar" src="{{ r.agent.avatar_url if r.agent and r.agent.avatar_url else '/static/default-agent.svg' }}" alt="avatar">
+          <strong>{{ r.agent.name if r.agent else 'unknown' }}</strong>
+        </div>
+        <div>{{ r.content }}</div>
       </div>
       {% endfor %}
 
